@@ -1,0 +1,39 @@
+# .github/workflows/ci.yml
+#
+# This file IS your CI pipeline. In Jenkins, you'd write a Jenkinsfile
+# and configure a Jenkins server. Here, GitHub runs it for free.
+
+name: CI                          # Display name on the Actions tab
+
+# "on" = the trigger. When should this pipeline run?
+# This replaces Jenkins webhook configuration entirely.
+on:
+  push:
+    branches: [main]              # Run on pushes to main
+  pull_request:
+    branches: [main]              # Run on PRs targeting main
+
+jobs:
+  # A "job" is like a Jenkins stage. It runs on a fresh VM every time.
+  build-and-test:
+    runs-on: ubuntu-latest        # GitHub provides this VM free.
+                                  # In Jenkins, this is like: agent { label 'linux' }
+
+    steps:
+      # Step 1: Check out the code. In Jenkins, this is automatic.
+      # In GitHub Actions, you use a pre-built "action" from the marketplace.
+      - uses: actions/checkout@v4
+
+      # Step 2: Install Node.js. Like installing a Jenkins tool.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Step 3: Install dependencies. "npm ci" is like "npm install"
+      # but stricter — it uses the exact versions from package-lock.json.
+      # This ensures reproducible builds (same deps in CI as on your machine).
+      - run: npm ci
+
+      # Step 4: Run tests. If any test fails, the whole workflow fails
+      # and the PR gets a red ❌ — just like Jenkins.
+      - run: npm test
