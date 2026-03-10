@@ -1,0 +1,114 @@
+# ============================================================
+# .github/workflows/build.yml
+# ============================================================
+#
+# PURPOSE: Build a Docker image and push it to GitHub Container
+# Registry (GHCR) every time code is pushed to main.
+#
+# WHY A SEPARATE FILE FROM ci.yml?
+# Separation of concerns (a real-world best practice):
+#   - ci.yml = "Is the code correct?" (runs on PRs AND pushes)
+#   - build.yml = "Package it for deployment" (runs ONLY on push to main)
+#
+# You don't want to build a Docker image for every PR — that wastes
+# time and registry storage. Only build when code actually lands on main.
+#
+# WHAT IS GHCR (GitHub Container Registry)?
+# It's like AWS ECR, but built into GitHub. Your Docker images live at:
+#   ghcr.io/gitorhit/hello-k8s:abc123
+#
+# Free for public repos, 500MB free for private repos.
+# No AWS account needed — it uses your GitHub account.
+#
+# ============================================================
+
+name: Build & Push Image
+
+# TRIGGER: Only on push to main (not on PRs).
+# When a PR is merged → that's a "push to main" → this workflow runs.
+on:
+  push:
+    branches: [main]
+
+# PERMISSIONS: This workflow needs to write to GHCR.
+# "packages: write" = permission to push Docker images to GHCR.
+# "contents: read" = permission to check out the code.
+# These are scoped to just this workflow — principle of least privilege.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── STEP 1: Check out the code ──
+      # Same as ci.yml — the VM starts empty, so we need to clone the repo.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── STEP 2: Set up Docker Buildx ──
+      # Buildx is Docker's next-gen build tool. It adds:
+      #   - Multi-platform builds (build for both Intel and ARM with one command)
+      #   - Better caching (cache layers in GitHub Actions cache)
+      #   - Build attestations (provenance tracking — "who built this image?")
+      # Think of it as: the upgraded version of "docker build".
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── STEP 3: Log in to GHCR ──
+      # Before pushing an image, we need to authenticate.
+      # - registry: ghcr.io = GitHub Container Registry
+      # - username: github.actor = your GitHub username (auto-filled)
+      # - password: secrets.GITHUB_TOKEN = a temporary token GitHub auto-generates
+      #   for every workflow run. You DON'T need to create or store this secret —
+      #   GitHub provides it automatically. It expires after the workflow finishes.
+      #   This is MUCH simpler than setting up ECR credentials!
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── STEP 4: Generate image tags ──
+      # We tag images with BOTH:
+      #   1. The git SHA (e.g., "abc123def") — unique, traceable to the exact commit
+      #   2. "latest" — always points to the most recent build
+      #
+      # WHY BOTH?
+      # - SHA tags let you deploy a specific version: "deploy commit abc123"
+      # - "latest" is convenient for local development: "docker pull latest"
+      # - In production, ALWAYS use SHA tags (never "latest") so deployments
+      #   are reproducible. "latest" can mean different things at different times.
+      #
+      # The "metadata-action" reads your git context and generates these tags
+      # automatically, so you don't have to construct them by hand.
+      - name: Extract image metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      # ── STEP 5: Build and push the Docker image ──
+      # This is the main event — it runs "docker build" and "docker push"
+      # in one step, using the Dockerfile in the repo root.
+      #
+      # cache-from / cache-to: Store Docker layer cache in GitHub Actions cache.
+      # This means if package.json didn't change, the "npm ci" layer is reused
+      # from the previous build → much faster builds (seconds instead of minutes).
+      #
+      # The tags and labels come from step 4 (the metadata-action).
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,42 @@
+# .dockerignore — Tells Docker which files to SKIP when doing "COPY . ."
+#
+# WHY THIS MATTERS:
+# When you run "docker build", Docker sends ALL files in your project
+# to the Docker daemon as "build context". Without .dockerignore:
+#   - node_modules/ (50MB+) gets sent, even though we re-install in the Dockerfile
+#   - .git/ history gets sent (could be huge)
+#   - Test files get copied into the production image (unnecessary bloat)
+#
+# This is like .gitignore, but for Docker builds.
+
+# Dependencies — we install fresh in the Dockerfile with "npm ci".
+# Sending your local node_modules would waste time and could introduce
+# platform-specific binaries (your Mac's modules won't work in Linux containers).
+node_modules/
+
+# Git history — not needed in the container
+.git/
+.gitignore
+
+# GitHub Actions workflows — only needed by GitHub, not by the container
+.github/
+
+# Test files — we don't run tests inside the production container
+*.test.js
+
+# Environment files — may contain secrets, never bake into an image!
+.env
+.env.*
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Documentation — not needed in the container
+README.md
+*.md
+
+# Docker files — prevent recursive copying
+Dockerfile
+docker-compose*.yml
