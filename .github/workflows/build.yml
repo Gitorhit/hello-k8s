@@ -13,21 +13,31 @@
 name: Build & Push Image
 
 on:
-  push:
-    branches: [main]
-    # Only build when these files change — no need to rebuild the image
-    # if you only changed a README.
-    # Also include this workflow file itself — so fixes to build.yml
-    # always trigger a test run.
-    paths:
-      - 'server.js'
-      - 'package*.json'
-      - 'Dockerfile'
-      - '.github/workflows/build.yml'
+  # "workflow_run" = "run this AFTER another workflow finishes"
+  # This replaces "on: push" — we no longer trigger on push directly.
+  #
+  # WHY? With "on: push", CI and build.yml ran at the SAME time in parallel.
+  # That means we could build and push a Docker image from broken code
+  # (if CI was still running and hadn't caught the bug yet).
+  #
+  # With "workflow_run", the chain is:
+  #   merge to main → CI runs → CI passes ✅ → build.yml starts
+  #                           → CI fails  ❌ → build.yml NEVER runs
+  #
+  # This guarantees: every image in GHCR came from code that passed all tests.
+  workflow_run:
+    workflows: ["CI"]       # Must match the "name:" in ci.yml exactly
+    types: [completed]      # Fire when CI finishes (pass or fail)
+    branches: [main]        # Only care about the main branch
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # Safety guard: even though workflow_run fires on "completed" (pass or fail),
+    # this condition ensures we ONLY build if CI actually passed.
+    # Without this, a fluke could still trigger the build on a failed run.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     # PERMISSIONS: GitHub Actions runs with minimal permissions by default.
     # We need to grant extra permissions explicitly for security reasons.
