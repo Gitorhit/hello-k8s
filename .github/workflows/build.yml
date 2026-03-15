@@ -16,11 +16,14 @@ on:
   push:
     branches: [main]
     # Only build when these files change — no need to rebuild the image
-    # if you only changed a README or a comment in a workflow file.
+    # if you only changed a README.
+    # Also include this workflow file itself — so fixes to build.yml
+    # always trigger a test run.
     paths:
       - 'server.js'
       - 'package*.json'
       - 'Dockerfile'
+      - '.github/workflows/build.yml'
 
 jobs:
   build:
@@ -49,10 +52,11 @@ jobs:
       # These two steps set up Docker to build for BOTH architectures at once,
       # so the same image works on any machine.
       - name: Set up QEMU (cross-platform build support)
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx (advanced build engine)
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
+
 
       # ── Log in to GHCR ──
       # GHCR is GitHub's free Docker image storage.
