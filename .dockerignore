@@ -1,0 +1,31 @@
+# .dockerignore
+# Files and folders to EXCLUDE from the Docker build context.
+#
+# When Docker builds an image it sends everything in the current folder
+# to the Docker daemon. This file tells it what to skip.
+# Without this, Docker would send node_modules/ (300MB+) every build!
+
+# We install packages fresh inside the container via "npm ci".
+# Sending pre-installed node_modules from your Mac would be slower
+# AND might contain Mac-specific binaries that don't work on Linux.
+node_modules
+
+# Git history, GitHub Actions, and IDE settings have nothing to
+# do with running the app — keep them out of the image.
+.git
+.gitignore
+.github
+
+# Test files are not needed in production. The image is for running
+# the app, not testing it (testing happens in CI before build).
+*.test.js
+
+# macOS system files — junk in every Mac folder
+.DS_Store
+
+# Editor settings — not needed at runtime
+.vscode
+.idea
+
+# Documentation
+README.md

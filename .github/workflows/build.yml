@@ -1,0 +1,103 @@
+# .github/workflows/build.yml
+#
+# WHAT THIS DOES:
+#   When code is merged to main, this workflow:
+#   1. Builds a Docker image from our Dockerfile
+#   2. Uploads it to GHCR (GitHub's free image storage)
+#   3. Tags it with the commit SHA so we can track "which image = which code"
+#
+# WHEN IT RUNS: only on pushes to main (not on PRs).
+# PRs run ci.yml (tests only). If tests pass and code is merged, THIS runs.
+# Think of it as: ci.yml = the gatekeeper, build.yml = the packager.
+
+name: Build & Push Image
+
+on:
+  push:
+    branches: [main]
+    # Only build when these files change — no need to rebuild the image
+    # if you only changed a README or a comment in a workflow file.
+    paths:
+      - 'server.js'
+      - 'package*.json'
+      - 'Dockerfile'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # PERMISSIONS: GitHub Actions runs with minimal permissions by default.
+    # We need to grant extra permissions explicitly for security reasons.
+    permissions:
+      contents: read    # Allows: git checkout (read the repo code)
+      packages: write   # Allows: push image to GHCR (write to the registry)
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # ── What is QEMU + Buildx? ──
+      # By default, Docker only builds for the current machine's CPU architecture.
+      # Your Mac might be ARM64 (Apple Silicon) but cloud servers are AMD64.
+      # These two steps set up Docker to build for BOTH architectures at once,
+      # so the same image works on any machine.
+      - name: Set up QEMU (cross-platform build support)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx (advanced build engine)
+        uses: docker/setup-buildx-action@v3
+
+      # ── Log in to GHCR ──
+      # GHCR is GitHub's free Docker image storage.
+      # We log in so Docker has permission to push the image there.
+      #
+      # HOW THE PASSWORD WORKS:
+      # ${{ secrets.GITHUB_TOKEN }} is a special token GitHub AUTOMATICALLY
+      # creates for every workflow run. You don't set this up — it just exists.
+      # It expires when the workflow finishes. No passwords stored anywhere!
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}           # Your GitHub username
+          password: ${{ secrets.GITHUB_TOKEN }}   # Auto-provided by GitHub
+
+      # ── Build & Push ──
+      # This is the main step: build the Docker image and upload it to GHCR.
+      #
+      # TAGGING STRATEGY:
+      # We create TWO tags for every image:
+      #
+      #   Tag 1: ghcr.io/.../hello-k8s:abc123def  (the commit SHA)
+      #     → This is permanent and specific. "abc123def" is the exact git
+      #       commit this image was built from. Even if you build 100 more
+      #       images, this tag always points to THIS exact version.
+      #       Used when Kubernetes deploys: "deploy image abc123def"
+      #
+      #   Tag 2: ghcr.io/.../hello-k8s:latest
+      #     → A floating alias that always points to the most recent build.
+      #       Convenient for "give me the newest one", but NOT used for
+      #       production deploys (you want to know EXACTLY what you deployed).
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .                              # Build from current directory
+          push: true                              # Push to registry (not just build locally)
+          platforms: linux/amd64,linux/arm64      # Build for Intel AND Apple Silicon
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+          # Cache layers between builds so repeated builds are faster.
+          # "gha" = GitHub Actions cache (free storage between runs).
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Summary ──
+      # Write a note to the GitHub Actions summary page showing what was built.
+      # Go to Actions tab → click a run → scroll down to see this summary.
+      - name: Print image summary
+        run: |
+          echo "✅ Image built and pushed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** ghcr.io/${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit tag:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Latest tag:** \`latest\`" >> $GITHUB_STEP_SUMMARY
