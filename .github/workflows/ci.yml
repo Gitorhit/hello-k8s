@@ -22,12 +22,12 @@ jobs:
     steps:
       # Step 1: Check out the code. In Jenkins, this is automatic.
       # In GitHub Actions, you use a pre-built "action" from the marketplace.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Step 2: Install Node.js. Like installing a Jenkins tool.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       # Step 3: Install dependencies. "npm ci" is like "npm install"
       # but stricter — it uses the exact versions from package-lock.json.
