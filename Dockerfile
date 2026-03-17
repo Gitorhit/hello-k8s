@@ -40,26 +40,21 @@ RUN npm ci --omit=dev
 # code changes (which happen often) don't invalidate the package cache.
 COPY . .
 
-# ─────────────────────────────────────────────
-# STAGE 2: Runner — the final, clean image
-# ─────────────────────────────────────────────
-# Start FRESH from a clean node:24-alpine.
-# Only the files we explicitly copy from Stage 1 come along.
-# npm cache, intermediate build files, etc. are LEFT BEHIND.
+# ── STAGE 2: The clean final image ──
+# Start fresh — only what we explicitly copy comes along.
+# npm cache, intermediate files, etc. are LEFT BEHIND.
 FROM node:24-alpine
-
 WORKDIR /app
 
-# Copy everything from the builder stage's /app folder.
-# "--from=builder" means "from Stage 1, not from the host machine".
-COPY --from=builder /app .
+# Switch to the non-root 'node' user that comes built-in with the image.
+# By default, Docker runs everything as the unrestricted 'root' user.
+# If a hacker breaches the app, they'd have root access. By switching
+# to this restricted user, we lock down the container.
+COPY --chown=node:node --from=builder /app .
+USER node
 
-# EXPOSE tells Docker (and Kubernetes) which port our app listens on.
-# This does NOT actually open the port — it's just documentation.
-# The port only opens when you run the container with -p 8080:8080.
+# EXPOSE documents which port the app uses.
+# It doesn't actually open the port — that happens when you run: -p 8080:8080
 EXPOSE 8080
 
-# CMD = the command that runs when the container starts.
-# Written as a JSON array (not a shell string) — this is the recommended form.
-# Equivalent to running: node server.js
 CMD ["node", "server.js"]
